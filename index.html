@@ -346,6 +346,22 @@
             justify-content: center;
             font-size: 28px;
             font-weight: 600;
+            position: relative;
+        }
+
+        .premium-emoji {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            background: gold;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            border: 2px solid var(--bg-primary);
         }
 
         .menu-user-details h3 {
@@ -1184,6 +1200,7 @@
             justify-content: center;
             font-size: 48px;
             margin: 0 auto 15px;
+            position: relative;
         }
 
         .profile-info-item {
@@ -1411,7 +1428,10 @@
             <div class="sidebar-menu" id="sidebarMenu">
                 <div class="menu-header">
                     <div class="menu-user-info">
-                        <div class="menu-avatar" id="menuAvatar">U</div>
+                        <div class="menu-avatar" id="menuAvatar">
+                            U
+                            <div class="premium-emoji" id="menuPremiumEmoji" style="display: none;">⭐</div>
+                        </div>
                         <div class="menu-user-details">
                             <h3 id="menuUserName">Пользователь</h3>
                             <p id="menuUserEmail">email@example.com</p>
@@ -1484,7 +1504,10 @@
             <div class="chat-area" id="chatArea">
                 <div class="chat-header" id="chatHeader" style="display: none;">
                     <button class="back-btn" onclick="event.stopPropagation(); backToChats()">←</button>
-                    <div class="contact-avatar" id="chatAvatar" onclick="event.stopPropagation(); openUserProfile()">U</div>
+                    <div class="contact-avatar" id="chatAvatar" onclick="event.stopPropagation(); openUserProfile()">
+                        U
+                        <div class="premium-emoji" id="chatPremiumEmoji" style="display: none;">⭐</div>
+                    </div>
                     <div class="chat-header-info" onclick="openUserProfile()">
                         <h3 id="chatName">Пользователь</h3>
                         <p id="chatStatus">онлайн</p>
@@ -1529,12 +1552,15 @@
 
     <div class="modal" id="profileModal">
         <div class="modal-content">
-            <div class="profile-header" id="profileHeader">
-                <div class="emoji-background" id="profileEmojiBackground"></div>
-                <div class="profile-avatar" id="profileAvatar">U</div>
-                <h2 id="profileName">Пользователь</h2>
-                <p id="profileDescription" style="opacity: 0.9; font-size: 14px; margin-top: 5px;"></p>
+           <div class="profile-header" id="profileHeader">
+            <div class="emoji-background" id="profileEmojiBackground"></div>
+            <div class="profile-avatar" id="profileAvatar">
+                U
+                <div class="premium-emoji" id="profilePremiumEmoji" style="display: none;">⭐</div>
             </div>
+            <h2 id="profileName">Пользователь</h2>
+            <p id="profileDescription" style="opacity: 0.9; font-size: 14px; margin-top: 5px;"></p>
+        </div>
             <div class="profile-info-item" id="profileEmailSection">
                 <div class="profile-info-label">Email</div>
                 <div class="profile-info-value" id="profileEmail">email@example.com</div>
@@ -1807,7 +1833,7 @@
 
             <h3 style="margin: 20px 0 10px 0; color: var(--text-primary);">Премиум возможности:</h3>
             <ul style="color: var(--text-secondary); font-size: 14px; line-height: 1.6; padding-left: 20px;">
-                <li>Эмодзи рядом с ником</li>
+                <li>Эмодзи рядом с аватаркой</li>
                 <li>Статус онлайн/офлайн</li>
                 <li>Изменение цвета профиля</li>
                 <li>Фоновые эмодзи в профиле</li>
@@ -1891,7 +1917,7 @@
     </div>
 
     <script>
-    // ============================================
+        // ============================================
 // КОНФИГУРАЦИЯ
 // ============================================
 
@@ -2159,22 +2185,12 @@ async function completeRegistration() {
             shericoin_balance: 10
         };
 
-        console.log('Attempting to insert:', insertData);
-
         const { data, error } = await supabase
             .from('users')
             .insert([insertData])
             .select();
 
-        console.log('Insert response - data:', data, 'error:', error);
-
         if (error) {
-            console.error('Supabase error details:', {
-                message: error.message,
-                details: error.details,
-                hint: error.hint,
-                code: error.code
-            });
             showToast('Ошибка базы данных: ' + (error.message || 'неизвестная ошибка'), 'error');
             return;
         }
@@ -2187,15 +2203,16 @@ async function completeRegistration() {
             shericoin_balance: 10
         };
         
+        // Устанавливаем начальные настройки для нового пользователя
+        userColors[currentUser.user_id] = '#667eea';
+        userEmojiBackgrounds[currentUser.user_id] = '⭐';
+        localStorage.setItem('userColors', JSON.stringify(userColors));
+        localStorage.setItem('userEmojiBackgrounds', JSON.stringify(userEmojiBackgrounds));
+        
         localStorage.setItem('currentUser', JSON.stringify(currentUser));
         showToast('Добро пожаловать в Sherigram!', 'success');
         startMessenger();
     } catch (err) {
-        console.error('Catch error details:', {
-            name: err.name,
-            message: err.message,
-            stack: err.stack
-        });
         showToast('Критическая ошибка: ' + err.message, 'error');
     }
 }
@@ -2305,14 +2322,142 @@ function updateShericoinBalance() {
 }
 
 // ============================================
+// PREMIUM MANAGEMENT IN SUPABASE
+// ============================================
+
+async function loadPremiumFromDatabase() {
+    try {
+        const { data, error } = await supabase
+            .from('premium_users')
+            .select('*')
+            .eq('user_id', currentUser.user_id)
+            .single();
+        
+        if (data && !error) {
+            // Обновляем премиум статус из базы
+            userPremium[currentUser.user_id] = data.expiry_date;
+            
+            // ЕСЛИ в базе есть настройки - используем их
+            if (data.profile_color && data.profile_color !== '#667eea') {
+                userColors[currentUser.user_id] = data.profile_color;
+            }
+            if (data.emoji_background && data.emoji_background !== '⭐') {
+                userEmojiBackgrounds[currentUser.user_id] = data.emoji_background;
+            }
+        } else {
+            // ЕСЛИ в базе нет записи, но в localStorage есть настройки - создаем запись
+            const hasLocalSettings = userColors[currentUser.user_id] || userEmojiBackgrounds[currentUser.user_id];
+            if (userPremium[currentUser.user_id] && hasLocalSettings) {
+                await updatePremiumInDatabase(
+                    currentUser.user_id,
+                    userPremium[currentUser.user_id],
+                    userColors[currentUser.user_id] || '#667eea',
+                    userEmojiBackgrounds[currentUser.user_id] || '⭐'
+                );
+            }
+        }
+        
+        // ВСЕГДА сохраняем в localStorage
+        localStorage.setItem('userPremium', JSON.stringify(userPremium));
+        localStorage.setItem('userColors', JSON.stringify(userColors));
+        localStorage.setItem('userEmojiBackgrounds', JSON.stringify(userEmojiBackgrounds));
+        
+        return data;
+    } catch (error) {
+        console.error('Error loading premium:', error);
+    }
+    return null;
+}
+
+async function updatePremiumInDatabase(userId, expiryDate, profileColor = '#667eea', emojiBackground = '⭐') {
+    try {
+        const { data: existing } = await supabase
+            .from('premium_users')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+        
+        if (existing) {
+            const { error } = await supabase
+                .from('premium_users')
+                .update({
+                    expiry_date: expiryDate,
+                    profile_color: profileColor,
+                    emoji_background: emojiBackground
+                })
+                .eq('user_id', userId);
+            
+            return !error;
+        } else {
+            const { error } = await supabase
+                .from('premium_users')
+                .insert([{
+                    user_id: userId,
+                    expiry_date: expiryDate,
+                    profile_color: profileColor,
+                    emoji_background: emojiBackground
+                }]);
+            
+            return !error;
+        }
+    } catch (error) {
+        console.error('Error updating premium in database:', error);
+        return false;
+    }
+}
+
+async function removePremiumFromDatabase(userId) {
+    try {
+        const { error } = await supabase
+            .from('premium_users')
+            .delete()
+            .eq('user_id', userId);
+        
+        return !error;
+    } catch (error) {
+        console.error('Error removing premium:', error);
+        return false;
+    }
+}
+
+async function loadAllPremiumUsers() {
+    try {
+        const { data, error } = await supabase
+            .from('premium_users')
+            .select('*, users!inner(name, username, user_id)')
+            .gt('expiry_date', new Date().toISOString());
+        
+        if (data && !error) {
+            data.forEach(premiumUser => {
+                userPremium[premiumUser.user_id] = premiumUser.expiry_date;
+                userColors[premiumUser.user_id] = premiumUser.profile_color;
+                userEmojiBackgrounds[premiumUser.user_id] = premiumUser.emoji_background;
+            });
+            
+            localStorage.setItem('userPremium', JSON.stringify(userPremium));
+            localStorage.setItem('userColors', JSON.stringify(userColors));
+            localStorage.setItem('userEmojiBackgrounds', JSON.stringify(userEmojiBackgrounds));
+            
+            return data;
+        }
+    } catch (error) {
+        console.error('Error loading premium users:', error);
+    }
+    return [];
+}
+
+// ============================================
 // MESSENGER INITIALIZATION
 // ============================================
 
 async function startMessenger() {
+    // ОБНОВЛЯЕМ localStorage с актуальными данными пользователя
     localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('messenger').classList.add('show');
     
+    // Загружаем настройки из localStorage
     adminBadges = JSON.parse(localStorage.getItem('adminBadges') || '{}');
     userColors = JSON.parse(localStorage.getItem('userColors') || '{}');
     userEmojiBackgrounds = JSON.parse(localStorage.getItem('userEmojiBackgrounds') || '{}');
@@ -2320,11 +2465,23 @@ async function startMessenger() {
     onlineStatus = JSON.parse(localStorage.getItem('onlineStatus') || '{}');
     userPremium = JSON.parse(localStorage.getItem('userPremium') || '{}');
     
+    // Убедимся, что у текущего пользователя есть настройки
+    if (!userColors[currentUser.user_id]) {
+        userColors[currentUser.user_id] = '#667eea';
+    }
+    if (!userEmojiBackgrounds[currentUser.user_id]) {
+        userEmojiBackgrounds[currentUser.user_id] = '⭐';
+    }
+    
     onlineStatus[currentUser.user_id] = true;
     localStorage.setItem('onlineStatus', JSON.stringify(onlineStatus));
+    localStorage.setItem('userColors', JSON.stringify(userColors));
+    localStorage.setItem('userEmojiBackgrounds', JSON.stringify(userEmojiBackgrounds));
     
     await loadShericoinFromDatabase();
+    await loadPremiumFromDatabase();
     
+    // ОБНОВЛЯЕМ ОТОБРАЖЕНИЕ ПОЛЬЗОВАТЕЛЯ С АКТУАЛЬНЫМИ ДАННЫМИ
     updateUserDisplay();
     
     if (ADMINS.includes(currentUser.username)) {
@@ -2382,21 +2539,36 @@ async function checkForNewMessages() {
 }
 
 function updateUserDisplay() {
+    if (!currentUser) {
+        console.error('currentUser is null!');
+        return;
+    }
+    
     const adminBadge = ADMINS.includes(currentUser.username) ? (adminBadges[currentUser.username] || '👑') : '';
     const isPremium = userPremium[currentUser.user_id] && new Date(userPremium[currentUser.user_id]) > new Date();
     const premiumBadge = isPremium ? '<span class="premium-badge">PREMIUM</span>' : '';
     
-    let displayName = currentUser.name;
+    // ИСПОЛЬЗУЕМ АКТУАЛЬНОЕ ИМЯ ИЗ currentUser
+    let displayName = currentUser.name || 'Пользователь';
     if (adminBadge) {
         displayName += ' ' + adminBadge;
     }
     
-    document.getElementById('menuAvatar').textContent = currentUser.name[0].toUpperCase();
+    document.getElementById('menuAvatar').textContent = (currentUser.name || 'U')[0].toUpperCase();
     document.getElementById('menuUserName').innerHTML = displayName + premiumBadge;
-    document.getElementById('menuUserEmail').textContent = currentUser.phone;
+    document.getElementById('menuUserEmail').textContent = currentUser.phone || 'email@example.com';
     
     const userColor = userColors[currentUser.user_id] || '#667eea';
     document.getElementById('menuAvatar').style.background = `linear-gradient(135deg, ${userColor}, ${userColor})`;
+    
+    // Показываем эмодзи премиума если есть
+    const premiumEmoji = document.getElementById('menuPremiumEmoji');
+    if (premiumEmoji && isPremium && userEmojiBackgrounds[currentUser.user_id]) {
+        premiumEmoji.textContent = userEmojiBackgrounds[currentUser.user_id];
+        premiumEmoji.style.display = 'flex';
+    } else if (premiumEmoji) {
+        premiumEmoji.style.display = 'none';
+    }
     
     updateShericoinBalance();
 }
@@ -2518,6 +2690,7 @@ async function loadChats() {
                 <div class="contact-avatar" style="background: linear-gradient(135deg, ${userColors[user.user_id] || '#667eea'}, ${userColors[user.user_id] || '#667eea'});">
                     ${isFavorite ? '<span class="favorite-badge">⭐</span>' : ''}
                     ${user.name[0].toUpperCase()}
+                    ${isPremium && userEmojiBackgrounds[user.user_id] ? `<div class="premium-emoji">${userEmojiBackgrounds[user.user_id]}</div>` : ''}
                 </div>
                 <div class="contact-info">
                     <div class="contact-name">${displayName} ${onlineIndicator}</div>
@@ -2615,13 +2788,22 @@ function openChat(user) {
     document.getElementById('chatAvatar').style.background = `linear-gradient(135deg, ${userColor}, ${userColor})`;
     document.getElementById('chatAvatar').textContent = user.name[0].toUpperCase();
     
+    // Показываем эмодзи премиума если есть
+    const premiumEmoji = document.getElementById('chatPremiumEmoji');
+    const isPremium = userPremium[user.user_id] && new Date(userPremium[user.user_id]) > new Date();
+    if (premiumEmoji && isPremium && userEmojiBackgrounds[user.user_id]) {
+        premiumEmoji.textContent = userEmojiBackgrounds[user.user_id];
+        premiumEmoji.style.display = 'flex';
+    } else if (premiumEmoji) {
+        premiumEmoji.style.display = 'none';
+    }
+    
     let displayName = user.name;
     if (ADMINS.includes(user.username)) {
         const badge = adminBadges[user.username] || '👑';
         displayName += ' ' + badge;
     }
     
-    const isPremium = userPremium[user.user_id] && new Date(userPremium[user.user_id]) > new Date();
     if (isPremium) {
         displayName += ' <span class="premium-badge">PREMIUM</span>';
     }
@@ -3153,12 +3335,23 @@ function updateProfileModal() {
     document.getElementById('profileAvatar').style.background = `rgba(255,255,255,0.3)`;
     document.getElementById('profileAvatar').textContent = user.name[0].toUpperCase();
     
+    // Показываем эмодзи премиума если есть - с проверкой на существование элемента
+    const premiumEmoji = document.getElementById('profilePremiumEmoji');
+    const isPremium = userPremium[user.user_id] && new Date(userPremium[user.user_id]) > new Date();
+    if (premiumEmoji && isPremium && userEmojiBackgrounds[user.user_id]) {
+        premiumEmoji.textContent = userEmojiBackgrounds[user.user_id];
+        premiumEmoji.style.display = 'flex';
+    } else if (premiumEmoji) {
+        premiumEmoji.style.display = 'none';
+    }
+    
     const emojiBackground = userEmojiBackgrounds[user.user_id];
-    if (emojiBackground) {
-        document.getElementById('profileEmojiBackground').textContent = emojiBackground;
-        document.getElementById('profileEmojiBackground').style.display = 'flex';
-    } else {
-        document.getElementById('profileEmojiBackground').style.display = 'none';
+    const emojiBackgroundElement = document.getElementById('profileEmojiBackground');
+    if (emojiBackgroundElement && emojiBackground) {
+        emojiBackgroundElement.textContent = emojiBackground;
+        emojiBackgroundElement.style.display = 'flex';
+    } else if (emojiBackgroundElement) {
+        emojiBackgroundElement.style.display = 'none';
     }
     
     let displayName = user.name;
@@ -3167,7 +3360,6 @@ function updateProfileModal() {
         displayName += ' ' + badge;
     }
     
-    const isPremium = userPremium[user.user_id] && new Date(userPremium[user.user_id]) > new Date();
     if (isPremium) {
         displayName += ' <span class="premium-badge">PREMIUM</span>';
     }
@@ -3257,7 +3449,7 @@ async function deleteUserAccount() {
     }
 }
 
-function toggleUserPremium() {
+async function toggleUserPremium() {
     if (!ADMINS.includes(currentUser.username) || !viewingUserId) {
         showToast('Недостаточно прав', 'error');
         return;
@@ -3267,11 +3459,13 @@ function toggleUserPremium() {
     
     if (isCurrentlyPremium) {
         delete userPremium[viewingUserId];
+        await removePremiumFromDatabase(viewingUserId);
         showToast('Премиум статус убран', 'info');
     } else {
         const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + 30);
         userPremium[viewingUserId] = expiryDate.toISOString();
+        await updatePremiumInDatabase(viewingUserId, expiryDate.toISOString());
         showToast('Премиум статус выдан на 30 дней', 'success');
     }
     
@@ -3433,12 +3627,24 @@ async function buyPremium() {
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 30);
     userPremium[currentUser.user_id] = expiryDate.toISOString();
-    localStorage.setItem('userPremium', JSON.stringify(userPremium));
     
-    showToast('Премиум активирован на 30 дней!', 'success');
-    updatePremiumModal();
-    updateUserDisplay();
-    loadChats();
+    // Используем текущие настройки из localStorage или значения по умолчанию
+    const updateSuccess = await updatePremiumInDatabase(
+        currentUser.user_id, 
+        expiryDate.toISOString(),
+        userColors[currentUser.user_id] || '#667eea',
+        userEmojiBackgrounds[currentUser.user_id] || '⭐'
+    );
+    
+    if (updateSuccess) {
+        localStorage.setItem('userPremium', JSON.stringify(userPremium));
+        showToast('Премиум активирован на 30 дней!', 'success');
+        updatePremiumModal();
+        updateUserDisplay();
+        loadChats();
+    } else {
+        showToast('Ошибка активации премиума', 'error');
+    }
 }
 
 function extendPremium() {
@@ -3451,13 +3657,25 @@ function selectProfileColor(color) {
         return;
     }
     
+    // Сохраняем в localStorage СРАЗУ
     userColors[currentUser.user_id] = color;
     localStorage.setItem('userColors', JSON.stringify(userColors));
     
+    // Обновляем отображение
     document.getElementById('menuAvatar').style.background = `linear-gradient(135deg, ${color}, ${color})`;
     
-    showToast('Цвет профиля изменен', 'success');
-    loadChats();
+    // Синхронизируем с базой
+    updatePremiumInDatabase(
+        currentUser.user_id,
+        userPremium[currentUser.user_id],
+        color,
+        userEmojiBackgrounds[currentUser.user_id] || '⭐'
+    ).then(success => {
+        if (success) {
+            showToast('Цвет профиля изменен', 'success');
+            loadChats();
+        }
+    });
 }
 
 function selectEmojiBackground(emoji) {
@@ -3466,10 +3684,24 @@ function selectEmojiBackground(emoji) {
         return;
     }
     
+    // Сохраняем в localStorage СРАЗУ
     userEmojiBackgrounds[currentUser.user_id] = emoji;
     localStorage.setItem('userEmojiBackgrounds', JSON.stringify(userEmojiBackgrounds));
     
-    showToast('Фоновый эмодзи изменен', 'success');
+    // Обновляем отображение
+    updateUserDisplay();
+    
+    // Синхронизируем с базой
+    updatePremiumInDatabase(
+        currentUser.user_id,
+        userPremium[currentUser.user_id],
+        userColors[currentUser.user_id] || '#667eea',
+        emoji
+    ).then(success => {
+        if (success) {
+            showToast('Фоновый эмодзи изменен', 'success');
+        }
+    });
 }
 
 function logout() {
@@ -3828,7 +4060,7 @@ async function loadChannelPosts() {
 }
 
 // ============================================
-// AUTO-LOGIN - РАБОЧИЙ ВХОД БЕЗ ДЕМО
+// AUTO-LOGIN
 // ============================================
 
 (async function() {
@@ -3845,16 +4077,27 @@ async function loadChannelPosts() {
                 .single();
 
             if (data && !error) {
+                // ОБНОВЛЯЕМ ВСЕ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ ИЗ БАЗЫ
                 currentUser = data;
+                
+                // Загружаем настройки из localStorage ПЕРЕД стартом мессенджера
+                adminBadges = JSON.parse(localStorage.getItem('adminBadges') || '{}');
+                userColors = JSON.parse(localStorage.getItem('userColors') || '{}');
+                userEmojiBackgrounds = JSON.parse(localStorage.getItem('userEmojiBackgrounds') || '{}');
+                userDescriptions = JSON.parse(localStorage.getItem('userDescriptions') || '{}');
+                onlineStatus = JSON.parse(localStorage.getItem('onlineStatus') || '{}');
+                userPremium = JSON.parse(localStorage.getItem('userPremium') || '{}');
+                
                 await startMessenger();
             } else {
                 localStorage.removeItem('currentUser');
             }
         } catch (err) {
+            console.error('Auto-login error:', err);
             localStorage.removeItem('currentUser');
         }
     }
 })();
-</script>
+    </script>
 </body>
 </html>
