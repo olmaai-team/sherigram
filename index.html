@@ -1659,9 +1659,9 @@ function confirmLogout() {
                 app_name: "Sherigram",
                 verification_code: verificationCode
             });
-            console.log('Код отправлен: ' + verificationCode);
+            
         } catch (e) {
-            console.log('Демо режим. Код: ' + verificationCode);
+            
         }
 
         document.getElementById('emailStep').classList.add('hidden');
@@ -1683,11 +1683,10 @@ function confirmLogout() {
     document.getElementById('verifyBtn').onclick = async () => {
         const code = Array.from({length: 6}, (_, i) => document.getElementById('code' + (i + 1)).value).join('');
         
-        console.log('Введенный код:', code);
-        console.log('Правильный код:', verificationCode);
+        
         
         if (code !== verificationCode) {
-            alert('Неверный код! Правильный: ' + verificationCode);
+           
             return;
         }
 
@@ -1731,28 +1730,63 @@ function confirmLogout() {
 
     // AUTO-LOGIN
     // AUTO-LOGIN
+    // AUTO-LOGIN
+    // AUTO-LOGIN - БЫСТРАЯ ВЕРСИЯ
     function saveUserToLocalStorage() {
         localStorage.setItem('currentUser', JSON.stringify(currentUser));
     }
 
-    function loadUserFromLocalStorage() {
+    async function loadUserFromLocalStorage() {
         const saved = localStorage.getItem('currentUser');
-        if (saved) {
-            try {
-                currentUser = JSON.parse(saved);
-                return true;
-            } catch (e) {
-                console.error('Ошибка загрузки:', e);
+        if (!saved) return false;
+        
+        try {
+            const user = JSON.parse(saved);
+            
+            // Быстрая проверка обязательных полей
+            if (!user.uid || !user.email || !user.displayName || !user.username) {
                 localStorage.removeItem('currentUser');
                 return false;
             }
+            
+            // Используем данные сразу, проверку базы делаем в фоне
+            currentUser = user;
+            
+            // Проверка базы в фоне (не блокирует загрузку)
+            db.ref('users/' + user.uid).once('value').then(snap => {
+                if (!snap.exists()) {
+                    localStorage.removeItem('currentUser');
+                    location.reload(); // Перезагрузим если юзер не найден
+                } else {
+                    // Обновляем данные если изменились
+                    const userData = snap.val();
+                    if (userData.displayName !== currentUser.displayName || 
+                        userData.username !== currentUser.username) {
+                        currentUser.displayName = userData.displayName;
+                        currentUser.username = userData.username;
+                        saveUserToLocalStorage();
+                        updateUserDisplay();
+                    }
+                }
+            }).catch(e => {
+                console.error('Ошибка проверки:', e);
+            });
+            
+            return true;
+            
+        } catch (e) {
+            localStorage.removeItem('currentUser');
+            return false;
         }
-        return false;
     }
 
-    if (loadUserFromLocalStorage()) {
-        startMessenger();
-    }
+    // Мгновенная загрузка
+    (async function() {
+        const loggedIn = await loadUserFromLocalStorage();
+        if (loggedIn) {
+            startMessenger();
+        }
+    })();
 
     // MESSENGER
 
@@ -2438,10 +2472,7 @@ if (replyBtn) {
         }
     }
 
-    // AUTO-LOGIN ON LOAD
-    if (loadUserFromLocalStorage()) {
-        startMessenger();
-    }
+    
 
 
 
